@@ -1,4 +1,68 @@
-# Allow the active desktop user to read HID battery reports without running as root.
+# Allow the active desktop user to query HID battery reports without running as root.
 # Uses logind's "uaccess" tag, so access follows the active session and no world-writable
-# permissions are needed. Reload with: sudo udevadm control --reload-rules && sudo udevadm trigger
-SUBSYSTEM=="hidraw", TAG+="uaccess"
+# permissions are needed. The tag grants read AND write on the hidraw node, so it is limited to the
+# devices the Linux drivers poll (linux/Makefile.linux DRIVERS; keep both in sync), not every hidraw
+# node. Rules match the parent HID device name, BUS:VID:PID.INSTANCE in upper-case hex, which is the
+# same for USB and Bluetooth. Reload with: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# Logitech
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:046D:*", TAG+="uaccess"
+# Razer
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:1532:*", TAG+="uaccess"
+# SteelSeries
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:1038:*", TAG+="uaccess"
+# Corsair
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:1B1C:*", TAG+="uaccess"
+# Cooler Master
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:2516:*", TAG+="uaccess"
+# Finalmouse
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:361D:*", TAG+="uaccess"
+# Glorious / Sinowealth, Hitscan, G-Wolves, WLMouse
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:258A:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:3770:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:33E4:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:36A7:*", TAG+="uaccess"
+# Kysona / Compx, ATK, Pulsar, HECATE
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:3554:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:373B:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:3710:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:35BB:*", TAG+="uaccess"
+
+# The vendor ids below also cover keyboards, printers and other unrelated hardware, so only the
+# product ids the drivers know are listed.
+# Sony DualShock 4 / DualSense (src/drivers/playstation.cpp)
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:054C:05C4.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:054C:09CC.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:054C:0BA0.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:054C:0CE6.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:054C:0DF2.*", TAG+="uaccess"
+# HyperX on HP's vendor id (src/drivers/hyperx.cpp kModels)
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:05B7.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0C9D.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:069F.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0995.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:06BE.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:02CC.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0696.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:018B.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0D93.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0C8C.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:098D.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:08BE.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0AB5.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0D97.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0F98.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0DA0.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0E90.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0A93.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:03F0:0A8E.*", TAG+="uaccess"
+# HyperX on Kingston's vendor id (src/drivers/hyperx.cpp kModels)
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:1718.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:16EA.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:16EB.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:16C4.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:1723.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:1749.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:170B.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:1713.*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="hid", KERNELS=="*:0951:173F.*", TAG+="uaccess"

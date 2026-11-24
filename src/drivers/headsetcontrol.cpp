@@ -1,6 +1,6 @@
 // Optional bridge to HeadsetControl (github.com/Sapd/HeadsetControl), which supports many more
-// headsets than the built-in drivers. If headsetcontrol.exe sits next to BatteryHub.exe or is
-// on PATH, it is run with `-o json` and any headset not already handled here is added.
+// headsets than the built-in drivers. If headsetcontrol.exe sits next to BatteryHub.exe, it is
+// run with `-o json` and any headset not already handled here is added.
 #include "drivers.h"
 
 #include <cstdlib>
@@ -114,9 +114,7 @@ std::wstring FindExe() {
     dir = dir.substr(0, dir.find_last_of(L"\\/") + 1);
     std::wstring local = dir + L"headsetcontrol.exe";
     if (GetFileAttributesW(local.c_str()) != INVALID_FILE_ATTRIBUTES) return local;
-    wchar_t found[MAX_PATH];
-    if (SearchPathW(nullptr, L"headsetcontrol.exe", nullptr, MAX_PATH, found, nullptr)) return found;
-    return L"";
+    return L"";  // no PATH / current-directory search: whatever is found gets executed on every refresh
 }
 
 // Runs the command line and returns its stdout (empty on failure or after `timeoutMs`).

@@ -106,10 +106,21 @@ void ApplyAutostart(bool on) {
     g_mkdir_with_parents(g_path_get_dirname(path.c_str()), 0700);
     g_autofree gchar* exe = g_file_read_link("/proc/self/exe", nullptr);
     if (!exe) return;
+    // Desktop Entry quoting: \ " ` $ take a backslash and % doubles. The file is written raw, so the
+    // key-file layer that readers undo first is applied too (backslashes doubled again, \n and \r).
+    std::string arg;
+    for (const char* p = exe; *p; p++) {
+        if (*p == '\\') arg += "\\\\\\\\";
+        else if (*p == '"' || *p == '`' || *p == '$') { arg += "\\\\"; arg += *p; }
+        else if (*p == '%') arg += "%%";
+        else if (*p == '\n') arg += "\\n";
+        else if (*p == '\r') arg += "\\r";
+        else arg += *p;
+    }
     std::string content =
         "[Desktop Entry]\nType=Application\nName=BatteryHub\n"
         "Comment=Show battery levels of wireless devices in the tray\n"
-        "Exec=\"" + std::string(exe) + "\"\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\n";
+        "Exec=\"" + arg + "\"\nNoDisplay=true\nX-GNOME-Autostart-enabled=true\n";
     g_file_set_contents(path.c_str(), content.c_str(), (gssize)content.size(), nullptr);
 }
 

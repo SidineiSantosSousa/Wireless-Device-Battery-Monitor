@@ -220,8 +220,11 @@ void PollGenericHid(PollContext& ctx) {
                 // declaring a 0-255 range; Linux handles them with HID_BATTERY_QUIRK_PERCENT.
                 bool percentQuirk = c.vid == 0x05AC && val <= 100;
                 if (percentQuirk) pct = (int)val;
-                else if (v.LogicalMax > v.LogicalMin) pct = Clamp100((int)(((LONG)val - v.LogicalMin) * 100 / (v.LogicalMax - v.LogicalMin)));
-                else if (val <= 100) pct = (int)val;
+                else if (v.LogicalMax > v.LogicalMin) {
+                    // 64-bit: the descriptor picks the range, and INT_MIN..INT_MAX overflows (and traps) in 32 bits.
+                    LONGLONG q = ((LONGLONG)(LONG)val - v.LogicalMin) * 100 / ((LONGLONG)v.LogicalMax - v.LogicalMin);
+                    pct = q < 0 ? 0 : q > 100 ? 100 : (int)q;
+                } else if (val <= 100) pct = (int)val;
             }
             if (pct >= 0) break;
         }

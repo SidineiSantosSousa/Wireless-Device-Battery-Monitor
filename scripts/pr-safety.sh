@@ -16,17 +16,25 @@ function flag(cat, text) {
     gsub(/\t/, " ", text)
     printf "%s\t%d\t%s\t%s\n", file, line, cat, substr(text, 1, 160)
 }
-/^diff --git / { file = $0; sub(/^.* b\//, "", file); next }
-/^\+\+\+ / {
+/^diff --git / { file = $0; sub(/^.* b\//, "", file); nold = nnew = 0; next }
+# nold/nnew: lines still owed by the current hunk (from its @@ header). Until both reach zero a line
+# is content, so an added line reading "++ b/notes.txt" cannot pose as the next file header.
+nold + nnew == 0 && /^\+\+\+ / {
     file = substr($0, 5); sub(/^b\//, "", file)
-    if (file ~ /^(\.github\/|installer\/|scripts\/|res\/)/ || file == "Makefile")
+    if (file ~ /^(\.github\/|installer\/|scripts\/|res\/|src\/update_)/ || file == "Makefile")
         printf "%s\t0\tsensitive file\tchanges the build, release or check pipeline\n", file
     next
 }
 /^Binary files / || /^GIT binary patch/ { printf "%s\t0\tbinary file\t%s\n", (file == "" ? "?" : file), $0; next }
-/^@@ / { match($0, /\+[0-9]+/); line = substr($0, RSTART + 1, RLENGTH - 1) - 1; next }
-/^-/ { next }
+/^@@ / {
+    match($0, /\+[0-9]+/); line = substr($0, RSTART + 1, RLENGTH - 1) - 1
+    nold = (split($2, n, ",") > 1 ? n[2] + 0 : 1); nnew = (split($3, n, ",") > 1 ? n[2] + 0 : 1)
+    next
+}
+nold > 0 && nnew > 0 && /^( |$)/ { nold--; nnew--; next }
+/^-/ { if (nold > 0) nold--; next }
 /^\+/ {
+    if (nnew > 0) nnew--
     line++
     text = substr($0, 2)
     if (file == "build.bat") {  # adding a driver to the file list is expected; anything else is not

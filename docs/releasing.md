@@ -3,6 +3,7 @@
 The app updates itself from GitHub releases, but it only installs a setup whose SHA-256 is listed in
 a `SHA256SUMS.txt` signed with the release key. That key lives on the maintainer's PC, never on
 GitHub: a hacked account, token or workflow can publish files, but not a signature the app accepts.
+The signature is only as good as the list you sign, though: check it as described below.
 
 ## Once: create the release key
 
@@ -29,13 +30,16 @@ powershell -ExecutionPolicy Bypass -File scripts\new-release-key.ps1
    ```
 
    It downloads `SHA256SUMS.txt` from the release, shows it, asks you to confirm, asks for the key
-   password and writes `SHA256SUMS.txt.sig`. If you have the same files in `dist\` (a local build of
-   that version), it shows whether they match.
+   password and writes `SHA256SUMS.txt.sig`. It refuses a list with anything but that version's
+   setup and portable zip, once each. If `dist\` has files with those names (a local build of that
+   version), their hashes must match the list, or it stops without signing.
 3. Upload `SHA256SUMS.txt.sig` to the release (the script opens the edit page). From then on the app
    offers **Download and install**. Before that it shows the update but only links to the release page.
 
 Only sign a list for a release you published yourself. The signature says "these exact files are the
-release", so signing is the step where a malicious upload would be caught.
+release", and the script signs the list the release carries: a hacked account or workflow can put
+its own files and hashes there. Signing catches that only if you compare the hashes shown with files
+you trust (for example your own build in `dist\`) before you confirm.
 
 ## Changing the key
 

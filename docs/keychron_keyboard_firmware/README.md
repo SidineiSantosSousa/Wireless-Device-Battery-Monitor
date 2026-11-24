@@ -25,6 +25,16 @@ A build for the **K5 Max ANSI RGB only** is attached to
 (`k5_max_ansi_rgb_battery.bin`, SHA256 `5971a3429ca38805e1dc40b97a9fc9faf0ae1be59e673dc03acbb74eeb277abd`).
 Do not flash it on another model or layout.
 
+Check the download against that SHA256 before flashing. If the command does not print `True`
+(Windows) or `OK` (Linux), do not flash the file:
+
+```
+# Windows (PowerShell)
+(Get-FileHash k5_max_ansi_rgb_battery.bin -Algorithm SHA256).Hash -eq '5971a3429ca38805e1dc40b97a9fc9faf0ae1be59e673dc03acbb74eeb277abd'
+# Linux
+echo '5971a3429ca38805e1dc40b97a9fc9faf0ae1be59e673dc03acbb74eeb277abd  k5_max_ansi_rgb_battery.bin' | sha256sum -c
+```
+
 ## Option 2: build it yourself
 
 Needs Git and Docker (or a working [QMK setup](https://docs.qmk.fm/newbs_getting_started)).

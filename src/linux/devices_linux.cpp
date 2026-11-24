@@ -2,7 +2,8 @@
 //
 // Deliberately separate from src/devices.cpp so the Windows build is untouched. This first phase
 // enables only the well-known vendors whose drivers do not depend on Windows-specific device
-// paths. Add more Poll* calls here (and the matching .cpp to Makefile.linux) in later phases.
+// paths. Add more Poll* calls here (and the matching .cpp to Makefile.linux, and its vendor ids
+// to linux/99-wireless-battery.rules) in later phases.
 #include "../devices.h"
 
 #include <cstdio>

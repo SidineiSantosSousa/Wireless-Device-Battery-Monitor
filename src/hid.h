@@ -66,6 +66,8 @@ public:
     bool Write(const std::vector<BYTE>& data, int timeoutMs = 500);
     bool Write(std::initializer_list<BYTE> data, int timeoutMs = 500) { return Write(std::vector<BYTE>(data), timeoutMs); }
     // Reads one input report into `buf` (resized to fit). Returns the byte count, or -1 on timeout/error.
+    // The device decides the length: `buf` can be shorter than inLen(), even empty, so check
+    // buf.size() before every index (GetFeature's `out` is featLen() bytes, also device-declared).
     int Read(std::vector<BYTE>& buf, int timeoutMs);
     // For collections without an interrupt OUT pipe (WriteFile fails there): arms a read, sends
     // `data` with HidD_SetOutputReport, and returns the first input report like Read() does.

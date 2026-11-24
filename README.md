@@ -356,8 +356,8 @@ Windows builds also need PowerShell for generating the shared executable/resourc
 The official repository's version tags build with `CHANNEL=stable`; local builds default to
 `dev`. Forks and pull requests do not enable official updates automatically.
 
-`BatteryHub.exe` on its own also works. Without `headsetcontrol.exe` next to it (or on `PATH`) you
-just lose the extra headsets.
+`BatteryHub.exe` on its own also works. Without `headsetcontrol.exe` next to it you just lose the
+extra headsets (a copy elsewhere, such as on `PATH`, is not used).
 
 ## Linux (experimental)
 
@@ -380,7 +380,7 @@ No extra HID library is needed (hidraw is used directly).
 ./wireless-battery --quit     # close the running tray instance
 ```
 
-HID access needs a udev rule, otherwise the app starts but finds no devices:
+HID access needs a udev rule, otherwise the app starts but finds no devices. The rule gives the logged-in user read and write access to the supported vendors' devices only, so `--dump` lists other devices only when run with `sudo`. If you installed an older copy of the rule, copy the new one over it:
 
 ```sh
 sudo cp linux/99-wireless-battery.rules /etc/udev/rules.d/
