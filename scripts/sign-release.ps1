@@ -30,16 +30,24 @@ $text = [Text.Encoding]::ASCII.GetString($data)
 $setup = "BatteryHub-Setup-$Version.exe"
 if ($text -notmatch "(?m)^[0-9a-fA-F]{64} [ *]$([regex]::Escape($setup))\r?$") { throw "SHA256SUMS.txt does not list $setup." }
 
+# Only this version's files (what installer\build-installer.ps1 writes), once each: the app accepts
+# any signed list that has the setup's line, so nothing else may ride along.
 # If this PC has the same files (for example a local build), they must match the list.
+$allowed = $setup, "BatteryHub-$Version-portable.zip"
+$seen = @()
 $root = Split-Path $PSScriptRoot -Parent
 foreach ($line in $text -split "`n") {
-    if ($line -match '^([0-9a-fA-F]{64}) [ *](.+?)\r?$') {
-        $local = Join-Path $root "dist\$($Matches[2])"
-        if (Test-Path -LiteralPath $local) {
-            $hash = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash
-            $state = if ($hash -eq $Matches[1].ToUpper()) { 'matches dist\' } else { 'DIFFERENT from dist\' }
-            Write-Host "  $($Matches[2]): $state"
-        }
+    $line = $line.TrimEnd("`r")
+    if ($line.Length -eq 0) { continue }  # .Length and .Contains are exact; -eq and -contains ignore control characters
+    if ($line -cnotmatch '^([0-9a-fA-F]{64}) [ *](.+)$' -or -not $allowed.Contains($Matches[2]) -or $seen.Contains($Matches[2])) {
+        throw "SHA256SUMS.txt has a line that is not one checksum of a version $Version file. Not signed: $($line -replace '[^ -~]', '?')"
+    }
+    $seen += $Matches[2]
+    $local = Join-Path $root "dist\$($Matches[2])"
+    if (Test-Path -LiteralPath $local) {
+        $hash = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash
+        if ($hash -ne $Matches[1]) { throw "$($Matches[2]) in the list is DIFFERENT from dist\$($Matches[2]). Not signed." }
+        Write-Host "  $($Matches[2]): matches dist\"
     }
 }
 

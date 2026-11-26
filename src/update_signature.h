@@ -3,7 +3,7 @@
 // written by CI) and SHA256SUMS.txt.sig, made by the maintainer on their own PC with
 // scripts/sign-release.ps1. The private key never goes to GitHub, so a hacked account or workflow
 // cannot publish an update this app would install: the setup's hash has to be in a list signed by
-// one of the public keys in update_public_key.h.
+// one of the public keys in update_public_key.h (true only if the maintainer checks the list before signing).
 //
 // Signature: ECDSA P-256 over SHA-256 of the file's bytes, 64 bytes r || s, base64 in the .sig file.
 #include <cstddef>

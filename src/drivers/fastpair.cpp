@@ -18,6 +18,7 @@
 #include "drivers.h"
 #include "ble_adverts.h"
 
+#include <iterator>
 #include <map>
 
 namespace {
@@ -54,6 +55,13 @@ void FastPairOnAdvert(UINT64 addr, const BYTE* data, UINT32 len) {
     if (!Parse(data, len, b)) return;
     b.tick = GetTickCount64();
     AcquireSRWLockExclusive(&g_lock);
+    // Anyone nearby can make up addresses: cap the map. Entries FastPairLookup no longer accepts go
+    // first; if it is still full, start over (a real device is back with its next broadcast).
+    if (g_battery.size() >= 256 && !g_battery.count(addr)) {
+        for (auto it = g_battery.begin(); it != g_battery.end();)
+            it = it->second.tick + 5 * 60 * 1000 <= b.tick ? g_battery.erase(it) : std::next(it);
+        if (g_battery.size() >= 256) g_battery.clear();
+    }
     g_battery[addr] = b;
     ReleaseSRWLockExclusive(&g_lock);
 }

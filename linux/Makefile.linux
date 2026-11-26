@@ -11,6 +11,12 @@
 CXX      ?= g++
 PKGCONFIG ?= pkg-config
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wno-missing-field-initializers
+# Hardening: the binary parses reports from untrusted devices. Kept out of CXXFLAGS and passed before
+# it, so a CXXFLAGS override keeps these flags and can still override them. _FORTIFY_SOURCE is left
+# alone when it is already defined (Ubuntu's g++ predefines a higher level) or nothing is optimised.
+FORTIFY := $(shell $(CXX) $(CXXFLAGS) -dM -E -x c++ /dev/null 2>/dev/null | grep -q -e _FORTIFY_SOURCE -e __NO_INLINE__ || echo -D_FORTIFY_SOURCE=2)
+HARDEN_CXXFLAGS := $(FORTIFY) -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fPIE
+HARDEN_LDFLAGS := -pie -Wl,-z,relro,-z,now
 GTK_CFLAGS := $(shell $(PKGCONFIG) --cflags gtk4 cairo)
 GTK_LIBS   := $(shell $(PKGCONFIG) --libs gtk4 cairo)
 
@@ -32,17 +38,18 @@ OBJ := $(patsubst src/%.cpp,build/linux/%.o,$(SRC))
 TARGET := wireless-battery
 
 $(TARGET): $(OBJ)
-	$(CXX) $^ -o $@ $(GTK_LIBS) -pthread
+	$(CXX) $(HARDEN_LDFLAGS) $^ -o $@ $(GTK_LIBS) -pthread
 
-build/linux/%.o: src/%.cpp
+# Depends on this file too: objects from before -fPIE was added here do not link with -pie.
+build/linux/%.o: src/%.cpp $(firstword $(MAKEFILE_LIST))
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(GTK_CFLAGS) -c $< -o $@
+	$(CXX) $(HARDEN_CXXFLAGS) $(CXXFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
 test:
 	@mkdir -p build/linux
-	$(CXX) $(CXXFLAGS) tests/linux_hid_test.cpp -o build/linux/linux_hid_test
+	$(CXX) $(HARDEN_CXXFLAGS) $(CXXFLAGS) $(HARDEN_LDFLAGS) tests/linux_hid_test.cpp -o build/linux/linux_hid_test
 	./build/linux/linux_hid_test
-	$(CXX) $(CXXFLAGS) tests/json_output_test.cpp -o build/linux/json_output_test
+	$(CXX) $(HARDEN_CXXFLAGS) $(CXXFLAGS) $(HARDEN_LDFLAGS) tests/json_output_test.cpp -o build/linux/json_output_test
 	./build/linux/json_output_test
 
 clean:

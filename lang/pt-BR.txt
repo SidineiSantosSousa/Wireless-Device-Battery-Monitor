@@ -151,6 +151,7 @@ Clear battery history for this device? = Limpar o histórico da bateria deste di
 Could not save history changes. = Não foi possível salvar as alterações do histórico.
 Show disconnected devices = Mostrar dispositivos desconectados
 Record battery history = Registrar histórico da bateria
+Reconnect automatically = Reconectar automaticamente
 Check battery every = Verificar bateria a cada
 {seconds} s = {seconds} s
 {minutes} min = {minutes} min

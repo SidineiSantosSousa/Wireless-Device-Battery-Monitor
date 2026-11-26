@@ -163,9 +163,10 @@ void PollXenta(PollContext& ctx) {
             }
             // Take everything queued since the last poll; a new listener waits for two frames.
             ULONGLONG until = GetTickCount64() + (fresh ? 5000 : 0);
+            ULONGLONG hardEnd = until + 500;  // a receiver that never goes quiet must not hold the poll thread
             std::vector<BYTE> r;
             int got = 0;
-            while (true) {
+            while ((LONGLONG)hardEnd - (LONGLONG)GetTickCount64() > 0) {
                 int wait = fresh && got < 2 ? (int)std::max<LONGLONG>(1, (LONGLONG)until - (LONGLONG)GetTickCount64()) : 30;
                 if (fresh && got < 2 && (LONGLONG)until - (LONGLONG)GetTickCount64() <= 0) break;
                 if (l.dev->Read(r, wait) < 5) break;

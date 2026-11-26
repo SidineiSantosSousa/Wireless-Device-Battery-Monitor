@@ -222,9 +222,16 @@ void AirPodsOnAdvert(UINT64 addr, int rssi, const BYTE* data, UINT32 len) {
     a.rssi = rssi;
     a.tick = GetTickCount64();
     AcquireSRWLockExclusive(&g_lock);
+    // Anyone nearby can make up addresses: cap the map by starting over when it is full (real
+    // AirPods are back with their next broadcast, several times a second).
+    if (g_adverts.size() >= 1024 && !g_adverts.count(addr)) g_adverts.clear();
     g_adverts[addr] = a;
-    for (auto it = g_adverts.begin(); it != g_adverts.end();)  // addresses rotate: drop old ones
-        it = a.tick - it->second.tick > 10 * 60 * 1000 ? g_adverts.erase(it) : std::next(it);
+    static ULONGLONG prunedAt = 0;  // guarded by g_lock: one pass a second, not one per message
+    if (prunedAt + 1000 <= a.tick) {
+        prunedAt = a.tick;
+        for (auto it = g_adverts.begin(); it != g_adverts.end();)  // addresses rotate: drop old ones
+            it = it->second.tick + 10 * 60 * 1000 < a.tick ? g_adverts.erase(it) : std::next(it);
+    }
     ReleaseSRWLockExclusive(&g_lock);
 }
 
