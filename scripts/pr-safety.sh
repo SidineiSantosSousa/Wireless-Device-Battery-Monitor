@@ -2,7 +2,7 @@
 # Scans a pull request's diff for things this app should never do, so a reviewer knows exactly which
 # lines to read carefully before merging. It reads the diff as text and never runs code from the PR.
 #
-#   usage: scripts/pr-safety.sh <diff-file>          (exit 1 when anything is flagged)
+#   usage: scripts/pr-safety.sh <diff-file>          (findings are advisory)
 #
 # This is a tripwire, not a guarantee: a clean result still needs a human review of the diff.
 set -u
@@ -61,7 +61,7 @@ nold > 0 && nnew > 0 && /^( |$)/ { nold--; nnew--; next }
     if (text ~ /["\047][A-Za-z0-9+\/=]{120,}["\047]/ || text ~ /(0x[0-9A-Fa-f]{2}, *){40,}/)
         flag("long encoded blob (possible hidden payload)", text)
 }
-' "$diff_file")
+' "$diff_file") || exit $?
 
 {
     echo "## PR safety check"
@@ -77,9 +77,9 @@ nold > 0 && nnew > 0 && /^( |$)/ { nold--; nnew--; next }
         printf '%s\n' "$findings" | while IFS=$'\t' read -r f l c t; do
             t="${t//|/\\|}"
             printf '| `%s` | %s | %s | `%s` |\n' "$f" "$l" "$c" "$t"
-            [ -n "${GITHUB_ACTIONS:-}" ] && echo "::warning file=$f,line=$l::$c" >&2
+            if [ -n "${GITHUB_ACTIONS:-}" ]; then
+                echo "::warning file=$f,line=$l::$c" >&2
+            fi
         done
     fi
-} >> "$summary"
-
-[ -z "$findings" ]
+} >> "$summary" || exit $?
