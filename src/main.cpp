@@ -19,6 +19,7 @@
 #include "alert_rules.h"
 #include "devices.h"
 #include "battery_history.h"
+#include "bt_reconnect.h"
 #include "i18n.h"
 #include "json_output.h"
 #include "labels.h"
@@ -47,6 +48,7 @@ enum MenuId : UINT {
     ID_REFRESH = 100, ID_AUTOSTART, ID_HIDE_LAST_KNOWN, ID_WIDGET_BACKGROUND, ID_EXIT, ID_MODE_WIDGET, ID_MODE_TRAY, ID_SUPPORT, ID_REPORT,
     ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED, ID_RECORD_HISTORY, ID_DIM_SLEEPING,
     ID_POLL_FIRST = 500,  // "Check battery every": ID_POLL_FIRST + 0..7
+    ID_RECONNECT_FIRST = 600,  // "Reconnect automatically": ID_RECONNECT_FIRST + 0..31
     ID_UPDATE = 200, ID_AUTO_UPDATE,
     ID_LANG_AUTO = 400, ID_LANG_ADD, ID_LANG_FIRST,  // "Language": ID_LANG_FIRST + 0..63
     ID_MONITOR_ALL = 300, ID_MONITOR_MAIN, ID_MONITOR_FIRST,  // "Show the widget on": ID_MONITOR_FIRST + 0..31
@@ -54,7 +56,7 @@ enum MenuId : UINT {
 };
 enum DeviceCmd : UINT {
     DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME, DEV_HISTORY,
-    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_STRIDE = 16
+    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_RECONNECT, DEV_STRIDE = 32
 };
 
 const wchar_t* kAppName = L"BatteryHub";
@@ -262,6 +264,49 @@ void SaveAlertThresholds() {
     if (multi.size() == 1) multi.push_back(L'\0');
     RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"AlertThresholds", REG_MULTI_SZ,
                     multi.data(), (DWORD)(multi.size() * sizeof(wchar_t)));
+}
+
+// Bluetooth audio devices to reconnect when they drop out (off by default): device key -> the name to
+// list it by while it is away. A REG_MULTI_SZ with one "device-key<TAB>name" entry per device.
+// Changed only by the UI thread, under the lock; the worker thread reads the keys under it.
+constexpr size_t kMaxAutoReconnect = 32;  // ID_RECONNECT_FIRST + 0..31
+std::map<std::wstring, std::wstring> g_autoReconnect;
+SRWLOCK g_autoReconnectLock = SRWLOCK_INIT;
+std::atomic<bool> g_reconnectNow{ false };  // "Refresh now": the worker drops its retry backoff
+
+void LoadAutoReconnect() {  // at startup, before the worker thread exists
+    DWORD size = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"AutoReconnectDevices", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS ||
+        size < 2 * sizeof(wchar_t) || size > 128 * 1024 || size % sizeof(wchar_t)) return;
+    std::vector<wchar_t> buf(size / sizeof(wchar_t) + 2, 0);
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"AutoReconnectDevices", RRF_RT_REG_MULTI_SZ, nullptr, buf.data(), &size) != ERROR_SUCCESS)
+        return;
+    for (const wchar_t* p = buf.data(); *p && g_autoReconnect.size() < kMaxAutoReconnect; p += wcslen(p) + 1) {
+        std::wstring item = p;
+        size_t tab = item.find(L'\t');
+        if (item.rfind(L"bt:", 0) == 0)
+            g_autoReconnect[item.substr(0, tab)] = tab == std::wstring::npos ? L"" : item.substr(tab + 1);
+    }
+}
+
+void SaveAutoReconnect() {
+    std::wstring multi;
+    for (const auto& [key, name] : g_autoReconnect) {
+        multi += key + L"\t" + name;
+        multi.push_back(L'\0');
+    }
+    multi.push_back(L'\0');
+    if (multi.size() == 1) multi.push_back(L'\0');
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"AutoReconnectDevices", REG_MULTI_SZ,
+                    multi.data(), (DWORD)(multi.size() * sizeof(wchar_t)));
+}
+
+// `name` is only used when this turns the option on.
+void ToggleAutoReconnect(const std::wstring& key, const std::wstring& name) {
+    AcquireSRWLockExclusive(&g_autoReconnectLock);
+    if (!g_autoReconnect.erase(key) && g_autoReconnect.size() < kMaxAutoReconnect) g_autoReconnect[key] = name;
+    ReleaseSRWLockExclusive(&g_autoReconnectLock);
+    SaveAutoReconnect();
 }
 
 bool LoadWidgetMode() { return LoadBoolSetting(L"TaskbarWidget", true); }
@@ -862,6 +907,9 @@ void ShowMenu() {
         }
         AppendMenuW(sub, MF_POPUP, (UINT_PTR)alertMenu, T(L"Battery alerts"));
         AppendMenuW(sub, MF_STRING, base + DEV_HISTORY, T(L"Battery history..."));
+        if (k.rfind(L"bt:", 0) == 0 && e->st.kind == DeviceKind::Headset)  // only audio can be reconnected
+            AppendMenuW(sub, MF_STRING | (g_autoReconnect.count(k) ? MF_CHECKED : 0), base + DEV_RECONNECT,
+                        T(L"Reconnect automatically"));
         std::wstring line = DisplayName(*e) + L":  " + StatusText(*e) + L"   [" + T(e->st.via) + L"]";
         AppendMenuW(m, MF_POPUP | (IsHidden(k) ? 0 : MF_CHECKED), (UINT_PTR)sub, line.c_str());
         keys.push_back(k);
@@ -870,6 +918,18 @@ void ShowMenu() {
     AppendMenuW(m, MF_STRING | (g_showDisconnectedDevices ? MF_CHECKED : 0), ID_SHOW_DISCONNECTED, T(L"Show disconnected devices"));
     AppendMenuW(m, MF_STRING | (g_dimSleeping ? MF_CHECKED : 0), ID_DIM_SLEEPING, T(L"Dim sleeping devices"));
     AppendMenuW(m, MF_STRING | (g_recordHistory ? MF_CHECKED : 0), ID_RECORD_HISTORY, T(L"Record battery history"));
+    // A device that is away is not in the list above: this is where its option can still be turned off.
+    std::vector<std::wstring> reconnectKeys;  // menu id ID_RECONNECT_FIRST + index
+    if (!g_autoReconnect.empty()) {
+        HMENU sub = CreatePopupMenu();
+        for (const auto& [key, saved] : g_autoReconnect) {
+            auto it = g_entries.find(key);
+            std::wstring name = aliases::DisplayName(g_aliases, key, it != g_entries.end() ? it->second.st.name : saved.empty() ? key : saved);
+            AppendMenuW(sub, MF_STRING | MF_CHECKED, ID_RECONNECT_FIRST + (UINT)reconnectKeys.size(), name.c_str());
+            reconnectKeys.push_back(key);
+        }
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)sub, T(L"Reconnect automatically"));
+    }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING | (g_wantWidget ? MF_CHECKED : 0), ID_MODE_WIDGET, T(L"Show on the taskbar (icon + percentage)"));
     AppendMenuW(m, MF_STRING | (!g_wantWidget ? MF_CHECKED : 0), ID_MODE_TRAY, T(L"Show as tray icons"));
@@ -951,7 +1011,7 @@ void ShowMenu() {
     PostMessageW(g_hwnd, WM_NULL, 0, 0);
     DestroyMenu(m);
     switch (cmd) {
-        case ID_REFRESH: SetEvent(g_refreshEvt); break;
+        case ID_REFRESH: g_reconnectNow = true; SetEvent(g_refreshEvt); break;
         case ID_AUTOSTART: SetAutostart(!AutostartEnabled()); break;
         case ID_HIDE_LAST_KNOWN: SetHideLastKnown(!g_hideLastKnown); break;
         case ID_SHOW_DISCONNECTED: SetShowDisconnectedDevices(!g_showDisconnectedDevices); break;
@@ -974,6 +1034,8 @@ void ShowMenu() {
         default:
             if (cmd >= ID_POLL_FIRST && cmd < ID_POLL_FIRST + ARRAYSIZE(POLL_SECONDS)) {
                 SetPollSeconds(POLL_SECONDS[cmd - ID_POLL_FIRST]);
+            } else if (cmd >= ID_RECONNECT_FIRST && cmd < ID_RECONNECT_FIRST + reconnectKeys.size()) {
+                ToggleAutoReconnect(reconnectKeys[cmd - ID_RECONNECT_FIRST], L"");
             } else if (cmd >= ID_LANG_FIRST && cmd < ID_LANG_FIRST + languages.size()) {
                 SetLanguage(languages[cmd - ID_LANG_FIRST].code);
             } else if (cmd >= ID_MONITOR_FIRST && cmd < ID_MONITOR_FIRST + monitors.size()) {
@@ -988,6 +1050,11 @@ void ShowMenu() {
                     case DEV_RESET_NAME: ResetDeviceName(key); break;
                     case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
                     case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
+                    case DEV_RECONNECT: {
+                        auto it = g_entries.find(key);
+                        ToggleAutoReconnect(key, it != g_entries.end() ? it->second.st.name : L"");
+                        break;
+                    }
                     case DEV_HISTORY: {
                         auto it = g_entries.find(key);
                         if (it != g_entries.end())
@@ -1049,13 +1116,34 @@ std::vector<DeviceStatus> DemoDevices() {
     return devices;
 }
 
+// After a poll: asks Windows to reconnect each opted-in Bluetooth device the poll did not find connected.
+// `retries` holds the devices missing right now; it is rebuilt, so one that came back or had the
+// option turned off starts over.
+void AutoReconnect(const std::vector<DeviceStatus>& found, std::map<std::wstring, bt_reconnect::Retry>& retries) {
+    std::vector<std::wstring> keys;
+    AcquireSRWLockShared(&g_autoReconnectLock);
+    for (const auto& [key, name] : g_autoReconnect) keys.push_back(key);
+    ReleaseSRWLockShared(&g_autoReconnectLock);
+    std::map<std::wstring, bt_reconnect::Retry> missing;
+    for (const auto& key : keys) {
+        if (std::any_of(found.begin(), found.end(), [&](const DeviceStatus& s) { return s.key == key && s.connected; })) continue;
+        bt_reconnect::Retry& r = missing[key] = retries[key];
+        const bt_reconnect::Retry before = r;
+        if (bt_reconnect::Due(r, GetTickCount64()) && !bt_reconnect::Reconnect(key)) r = before;  // nothing to ask yet: not an attempt
+    }
+    retries.swap(missing);
+}
+
 DWORD WINAPI Worker(LPVOID) {
     // At sign-in a USB receiver may enumerate before its wireless link is ready.
     constexpr DWORD startupPollDelays[] = { 3000, 7000, 15000 };
     size_t startupPoll = 0;
     HANDLE events[2] = { g_stopEvt, g_refreshEvt };
+    std::map<std::wstring, bt_reconnect::Retry> retries;
     for (;;) {
         auto* v = new std::vector<DeviceStatus>(g_demo ? DemoDevices() : PollAllDevices());
+        if (g_reconnectNow.exchange(false)) retries.clear();
+        if (!g_demo) AutoReconnect(*v, retries);
         if (!PostMessageW(g_hwnd, WM_RESULTS, 0, (LPARAM)v)) delete v;
         DWORD delay = g_pollIntervalMs;
         if (startupPoll < ARRAYSIZE(startupPollDelays)) delay = startupPollDelays[startupPoll++];
@@ -1300,6 +1388,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     LoadOrder();
     LoadAliases();
     LoadAlertThresholds();
+    LoadAutoReconnect();
     battery_history::Initialize(g_demo);
     Reconcile();
     UpdatePlaceholder();  // something to click on until the first poll finishes
