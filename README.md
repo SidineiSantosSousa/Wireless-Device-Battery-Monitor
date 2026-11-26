@@ -414,7 +414,7 @@ the remaining vendors are planned follow-up phases.
 
 ## How it works
 
-Each vendor driver in [`src/drivers/`](src/drivers) recognises its devices by USB vendor and product ID, and only ever sends read-only battery queries. Unknown devices are never written to. The generic fallbacks (HID battery usage, Bluetooth, XInput, HeadsetControl) only look at devices no vendor driver has claimed.
+Each vendor driver in [`src/drivers/`](src/drivers) recognises its devices by USB vendor and product ID, and only ever sends read-only battery queries. Unknown devices are never written to. The one action the app can take on a device is opt-in and off by default: *Reconnect automatically* in a Bluetooth headset's submenu asks Windows, on each battery check, to reconnect that device's audio while it is paired but not connected, including after you disconnect it yourself; untick it in the menu to stop. The generic fallbacks (HID battery usage, Bluetooth, XInput, HeadsetControl) only look at devices no vendor driver has claimed.
 
 The taskbar widget is a layered child window of `Shell_TrayWnd`, placed left of `TrayNotifyWnd`. If Explorer restarts, it is re-created.
 
